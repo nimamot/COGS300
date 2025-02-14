@@ -6,6 +6,9 @@ Welcome to **The Circuit Breakers'** GitHub repository! This is not just a colle
 
 This repository is meant to be a  **source of inspiration**. Feel free to experiment, break things, and rebuild them in new ways. After all, true learning happens at the edges of structure and chaos. 🚀
 
+🔗 **Follow us on Instagram for updates, cool projects, and chaotic creativity!**  
+[**@real_circuit_breakers**](https://www.instagram.com/real_circuit_breakers/)
+
 ## Table of Contents
 
 - [Lab 0: Introduction to Unity](#lab-0-introduction-to-unity)
