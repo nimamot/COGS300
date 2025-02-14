@@ -4,7 +4,7 @@
 
 Welcome to **The Circuit Breakers'** GitHub repository! This is not just a collection of COGS 300 labs—it's a playground for creative problem-solving, experimentation, and exploration. We embrace **bricolage**, an approach where we build, tinker, and remix ideas to deepen our understanding of cognitive systems. 
 
-This repository is not meant to be a rigid template but rather a **source of inspiration**. Feel free to experiment, break things, and rebuild them in new ways. After all, true learning happens at the edges of structure and chaos. 🚀
+This repository is meant to be a  **source of inspiration**. Feel free to experiment, break things, and rebuild them in new ways. After all, true learning happens at the edges of structure and chaos. 🚀
 
 ## Table of Contents
 
