@@ -1,0 +1,195 @@
+#include <Arduino.h>
+
+// ----------------------------
+// Motor Pin Definitions
+// ----------------------------
+int motorAPin_A = 8;    // Left motor direction pin
+int motorAPin_B = 9;    // Left motor speed (PWM)
+int motorBPin_A = 4;    // Right motor direction pin
+int motorBPin_B = 5;    // Right motor speed (PWM)
+
+// ----------------------------
+// Photocell Sensor Definition
+// ----------------------------
+const int SENSOR_LEFT = A3;    // Left photocell sensor
+const int SENSOR_MIDDLE = A4;  // Middle photocell sensor
+const int SENSOR_RIGHT = A5;   // Right photocell sensor
+
+// ----------------------------
+// Sensor Threshold and Baseline Values
+// ----------------------------
+const int THRESHOLD = 15;   // Adjust based on testing 
+const int LEFT_BASE = 38;   // Adjust based on testing (left sensor base value)
+const int MIDDLE_BASE = 32; // Adjust based on testing (middle sensor base value)
+const int RIGHT_BASE = 38;  // Adjust based on testing (right sensor base value)
+
+// ----------------------------
+// Motor Control Functions
+// ----------------------------
+
+// Moves both motors forward
+void moveMotorForward() {
+  digitalWrite(motorAPin_A, HIGH);  // Set left motor forward
+  analogWrite(motorAPin_B, LOW);   // Disable reverse
+
+  digitalWrite(motorBPin_A, HIGH);  // Set right motor forward
+  analogWrite(motorBPin_B, LOW);   // Disable reverse
+}
+
+// Moves both motors backward
+void moveMotorBackward() {
+  digitalWrite(motorAPin_A, LOW);   // Disable forward
+  digitalWrite(motorAPin_B, 100);  // Set left motor backward
+
+  digitalWrite(motorBPin_A, LOW);   // Disable forward
+  digitalWrite(motorBPin_B, 100);  // Set right motor backward
+}
+
+
+void moveMotorWiggle() {
+  // Move forward for a short period
+  digitalWrite(motorAPin_A, HIGH);  // Set left motor forward
+  analogWrite(motorAPin_B, 100);    // Set left motor speed
+
+  digitalWrite(motorBPin_A, HIGH);  // Set right motor forward
+  analogWrite(motorBPin_B, 100);    // Set right motor speed
+
+  delay(150);  // Move forward for a short time (wiggle forward)
+
+  // Pause briefly
+  digitalWrite(motorAPin_A, LOW);   // Stop left motor
+  digitalWrite(motorBPin_A, LOW);   // Stop right motor
+  delay(25);  // Pause to create wiggle effect
+
+  // Move forward again
+  digitalWrite(motorAPin_A, HIGH);  // Set left motor forward
+  analogWrite(motorAPin_B, 100);    // Set left motor speed
+
+  digitalWrite(motorBPin_A, HIGH);  // Set right motor forward
+  analogWrite(motorBPin_B, 100);    // Set right motor speed
+
+  delay(150);  // Move forward for a short time (wiggle forward)
+
+  // Pause briefly
+  digitalWrite(motorAPin_A, LOW);   // Stop left motor
+  digitalWrite(motorBPin_A, LOW);   // Stop right motor
+  delay(25);  // Pause to create wiggle effect
+}
+
+// Turn right by making the left motor move forward at full speed and right motor at slower speed
+void turnRight() {
+  Serial.println("Turning Right...");
+  // Left motor moves forward at full speed
+  analogWrite(motorAPin_A, 255);    // Left motor forward
+  digitalWrite(motorAPin_B, LOW);   // Set left motor direction
+
+  // Right motor moves forward at slower speed
+  analogWrite(motorBPin_A, 100);    // Right motor slow
+  digitalWrite(motorBPin_B, LOW);   // Set right motor direction
+
+  delay(400); // Turn right for 500ms (adjust for desired turning angle)
+
+  // Stop the motors after the turn
+  digitalWrite(motorAPin_A, LOW);   // Stop left motor
+  digitalWrite(motorBPin_A, LOW);   // Stop right motor
+}
+
+// Turn left by making the right motor move forward at full speed and left motor at slower speed
+void turnLeft() {
+  Serial.println("Turning Left...");
+  // Right motor moves forward at full speed
+  analogWrite(motorBPin_A, 255);    // Right motor forward
+  digitalWrite(motorBPin_B, LOW);   // Set right motor direction
+
+  // Left motor moves forward at slower speed
+  analogWrite(motorAPin_A, 100);    // Left motor slow
+  digitalWrite(motorAPin_B, LOW);   // Set left motor direction
+
+  delay(400); // Turn left for 500ms (adjust for desired turning angle)
+
+  // Stop the motors after the turn
+  digitalWrite(motorAPin_A, LOW);   // Stop left motor
+  digitalWrite(motorBPin_A, LOW);   // Stop right motor
+}
+
+
+// Adjust right with pulsed correction
+void adjustRight() {
+  for (int i = 0; i < 5; i++) { 
+    // Left wheel moves forward slowly
+    analogWrite(motorAPin_A, 100);
+    digitalWrite(motorAPin_B, LOW);
+    // Right wheel moves forward at full speed
+    analogWrite(motorBPin_A, 128);
+    digitalWrite(motorBPin_B, LOW);
+    delay(30);
+  }
+}
+
+// Adjust left with pulsed correction
+void adjustLeft() {
+  for (int i = 0; i < 5; i++) { 
+    // Left wheel moves forward slowly
+    analogWrite(motorAPin_A, 128);
+    digitalWrite(motorAPin_B, LOW);
+    // Right wheel moves forward at full speed
+    analogWrite(motorBPin_A, 100);
+    digitalWrite(motorBPin_B, LOW);
+    delay(30);
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Set motor pins as outputs
+  pinMode(motorAPin_A, OUTPUT);
+  pinMode(motorAPin_B, OUTPUT);
+  pinMode(motorBPin_A, OUTPUT);
+  pinMode(motorBPin_B, OUTPUT);
+  
+  // Set sensor pins as inputs
+  pinMode(SENSOR_LEFT, INPUT);
+  pinMode(SENSOR_MIDDLE, INPUT);
+  pinMode(SENSOR_RIGHT, INPUT);
+}
+
+void loop() {
+  // Read sensor values
+  int rawLeft = analogRead(SENSOR_LEFT);
+  int rawMiddle = analogRead(SENSOR_MIDDLE);
+  int rawRight = analogRead(SENSOR_RIGHT);
+
+  // Print sensor values for debugging
+  Serial.print("Left: ");
+  Serial.print(rawLeft);
+  Serial.print("  Middle: ");
+  Serial.print(rawMiddle);
+  Serial.print("  Right: ");
+  Serial.println(rawRight);
+
+  // Decision logic based on sensor readings
+  // Compare the right sensor with its baseline and the left sensor with its baseline
+  if ((rawMiddle > MIDDLE_BASE + THRESHOLD) && (rawRight >= (RIGHT_BASE + THRESHOLD))) {
+  Serial.println("Turning LEFT");
+    turnLeft();
+    
+  }
+  else if ((rawMiddle > MIDDLE_BASE + THRESHOLD) && (rawLeft >= (LEFT_BASE + THRESHOLD))) {
+    Serial.println("Turning right");
+    turnRight();
+  }
+  else if (rawRight >= (RIGHT_BASE + THRESHOLD)) {
+    Serial.println("Adjusting Right");
+    adjustRight();
+  } else if (rawLeft >= (LEFT_BASE + THRESHOLD)) {
+    Serial.println("ADjusting Left");
+    adjustLeft();
+  }
+  else {
+     moveMotorWiggle();
+     Serial.println("Moving Forward");
+  }
+
+  delay(50); // Small delay to improve stability
+}
