@@ -104,6 +104,7 @@ void loop() {
     // No sensors detect white line, lost the line
     Serial.println("Action: Searching for Line");
     searchForLine();
+
   }
   else if (leftSensor == 1 && middleSensor == 1 && rightSensor == 1) {
     // All sensors detect white, at intersection
