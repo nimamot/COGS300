@@ -1,0 +1,473 @@
+/**
+ * Arduino Robot with Line Following and Wall Following capabilities
+ * Features transition from line following to wall following mode
+ */
+
+// Motor Pins
+int motorAPin_A = 8;    
+int motorAPin_B = 9;    
+int motorBPin_A = 7;    
+int motorBPin_B = 6;    
+
+// IR Array Connections
+const int L_IR = A2;    
+const int M_IR = A1;    
+const int R_IR = A0;    
+
+// Ultrasonic sensor pins
+#define TRIG_FRONT 10     // Front ultrasonic trigger
+#define ECHO_FRONT 13     // Front ultrasonic echo
+#define TRIG_LEFT 2       // Left ultrasonic trigger
+#define ECHO_LEFT 3       // Left ultrasonic echo
+#define TRIG_RIGHT 12     // Right ultrasonic trigger
+#define ECHO_RIGHT 11     // Right ultrasonic echo
+
+// Constants for PID control (for wall following)
+float Kp = 1.5;           // Proportional constant
+float Ki = 0.05;          // Integral constant
+float Kd = 0.8;           // Derivative constant
+
+// Constants for wall following
+const int TARGET_DISTANCE = 15;   // Target distance from wall in cm
+const int FRONT_THRESHOLD = 15;   // Distance to trigger turning (front sensor)
+const int MAX_DISTANCE = 200;     // Maximum measurable distance
+const int BASE_SPEED = 150;       // Base motor speed (0-255)
+const int MAX_SPEED = 175;        // Maximum motor speed
+const int TURN_SPEED = 125;       // Speed for turning
+
+// Variables for PID calculation
+float lastError = 0;
+float integral = 0;
+
+// Variables to store ultrasonic sensor readings
+long durationFront, durationLeft, durationRight;
+int distanceFront, distanceLeft, distanceRight;
+
+// Threshold to determine white vs black for line following
+// For your sensors, LOWER values indicate WHITE line
+const int threshold = 200;  // Values below this are considered white line
+
+// Motor speed settings for line following
+const int forwardSpeed = 200;  // Reduced base speed for better accuracy
+const int correctionSpeed = 120;  // Slower speed for minor corrections
+const int turnSpeed = 230;  // Increased for sharper turns
+
+// Delay values for line following
+const int sharpTurnDelay = 250;  // Slightly reduced for faster response
+const int softAdjustmentDelay = 20;  // For soft corrections
+const int loopDelay = 40;  // Further reduced for quicker response
+
+// Stage control flags
+bool startLine = true;   // Start with line following
+bool startWall = false;  // Wall following initially disabled
+bool startSweep = false; // Sweeping mode initially disabled
+
+// Detection threshold for when to transition from line to wall
+const int WALL_DETECTION_THRESHOLD = 20; // Distance in cm that indicates a wall is close enough
+
+void setup() {
+  // Set motor pins as outputs
+  pinMode(motorAPin_A, OUTPUT);
+  pinMode(motorAPin_B, OUTPUT);
+  pinMode(motorBPin_A, OUTPUT);
+  pinMode(motorBPin_B, OUTPUT);
+  
+  // Set IR sensor pins as inputs
+  pinMode(L_IR, INPUT);
+  pinMode(M_IR, INPUT);
+  pinMode(R_IR, INPUT);
+  
+  // Setup ultrasonic sensor pins
+  pinMode(TRIG_FRONT, OUTPUT);
+  pinMode(ECHO_FRONT, INPUT);
+  pinMode(TRIG_LEFT, OUTPUT);
+  pinMode(ECHO_LEFT, INPUT);
+  pinMode(TRIG_RIGHT, OUTPUT);
+  pinMode(ECHO_RIGHT, INPUT);
+  
+  // Initialize serial communication for debugging
+  Serial.begin(9600);
+  
+  // Stop motors at startup
+  stopMotors();
+  
+  // Wait for a moment before starting
+  delay(2000);
+}
+
+void loop() {
+  // Check which mode we're currently in
+  if (startLine) {
+    lineFollowingMode();
+    
+    // Check if wall is detected to transition
+    readSensors(); // Read ultrasonic sensors
+    
+    // If either left or right wall is detected within threshold
+    if (distanceLeft < WALL_DETECTION_THRESHOLD || distanceRight < WALL_DETECTION_THRESHOLD) {
+      // Transition to wall following mode
+      startLine = false;
+      startWall = true;
+      startSweep = false;
+      
+      Serial.println("MODE TRANSITION: Line Following → Wall Following");
+      
+      // Brief pause to stabilize before mode switch
+      stopMotors();
+      delay(500);
+    }
+  } 
+  else if (startWall) {
+    wallFollowingMode();
+    
+    // Add any transitions from wall following to other modes here if needed
+  }
+  else if (startSweep) {
+    sweepMode();
+    
+    // Add any transitions from sweep mode to other modes here if needed
+  }
+  
+  // Small delay for stability
+  delay(50);
+}
+
+//========================
+// LINE FOLLOWING FUNCTIONS
+//========================
+
+// Line following mode - calls the original line following code
+void lineFollowingMode() {
+  // Read IR sensor values
+  int leftValue = analogRead(L_IR);
+  int middleValue = analogRead(M_IR);
+  int rightValue = analogRead(R_IR);
+  
+  // Convert analog readings to binary
+  // For your sensors: LOW value = WHITE line (1), HIGH value = NO line (0)
+  bool leftSensor = (leftValue < threshold) ? 1 : 0;
+  bool middleSensor = (middleValue < threshold) ? 1 : 0;
+  bool rightSensor = (rightValue < threshold) ? 1 : 0;
+  
+  // Print sensor values for debugging
+  Serial.print("LINE MODE - Left: ");
+  Serial.print(leftValue);
+  Serial.print(" (");
+  Serial.print(leftSensor);
+  Serial.print(") Middle: ");
+  Serial.print(middleValue);
+  Serial.print(" (");
+  Serial.print(middleSensor);
+  Serial.print(") Right: ");
+  Serial.print(rightValue);
+  Serial.print(" (");
+  Serial.print(rightSensor);
+  Serial.println(")");
+  
+  // Line following logic with improved prioritization of turns
+  if (leftSensor == 1 && middleSensor == 1 && rightSensor == 0) {
+    // Left sensor detects line - sharp turn left (highest priority)
+    Serial.println("Action: Sharp Left Turn");
+    sharpLeft();
+    return; // Skip the rest of the loop to respond immediately
+  } 
+  else if (rightSensor == 1 && middleSensor == 1 && leftSensor == 0) {
+    // Right sensor detects line - sharp turn right (highest priority)
+    Serial.println("Action: Sharp Right Turn");
+    sharpRight();
+    return; // Skip the rest of the loop to respond immediately
+  }
+  else if (leftSensor == 0 && middleSensor == 0 && rightSensor == 1) {
+    // Left and middle sensors detect line - medium turn left
+    Serial.println("Action: Medium Left Turn");
+    adjustLeft();
+  }
+  else if (rightSensor == 0 && middleSensor == 0 && leftSensor == 1) {
+    // Right and middle sensors detect line - medium turn right
+    Serial.println("Action: Medium Right Turn");
+    adjustRight();
+  }
+  else if (middleSensor == 1 && leftSensor == 0 && rightSensor == 0) {
+    // Only middle sensor detects line, go straight
+    Serial.println("Action: Move Forward");
+    moveMotorForward(forwardSpeed, forwardSpeed);
+  } 
+  else if (leftSensor == 0 && middleSensor == 0 && rightSensor == 0) {
+    // No sensors detect white line, lost the line
+    Serial.println("Action: Searching for Line");
+    searchForLine();
+  }
+  else if (leftSensor == 1 && middleSensor == 1 && rightSensor == 1) {
+    // All sensors detect white, at intersection
+    Serial.println("Action: At Intersection");
+    moveMotorForward(forwardSpeed, forwardSpeed);
+    delay(200);
+  }
+  
+  // Reduced delay between readings for more responsive control
+  delay(loopDelay);
+}
+
+// Dedicated function for soft left adjustment
+void adjustLeft() {
+  moveMotorForward(correctionSpeed, forwardSpeed);
+  delay(softAdjustmentDelay);
+}
+
+// Dedicated function for soft right adjustment
+void adjustRight() {
+  moveMotorForward(forwardSpeed, correctionSpeed);
+  delay(softAdjustmentDelay);
+}
+
+void searchForLine() {
+  // Enhanced search pattern with more backward movement
+  
+  // Back up for longer
+  moveMotorBackward();
+  delay(350); // Increased from 200 for more backward movement
+  stopMotors();
+  delay(50);
+}
+
+//========================
+// WALL FOLLOWING FUNCTIONS
+//========================
+
+// Wall following mode - calls the original wall following code
+void wallFollowingMode() {
+  // Read distance from all ultrasonic sensors
+  readSensors();
+  
+  // Print sensor readings with mode indicator
+  Serial.print("WALL MODE - Front: ");
+  Serial.print(distanceFront);
+  Serial.print(" cm | Left: ");
+  Serial.print(distanceLeft);
+  Serial.print(" cm | Right: ");
+  Serial.print(distanceRight);
+  Serial.println(" cm");
+  
+  // Wall following logic with obstacle avoidance
+  followWall();
+}
+
+// Placeholder for the third mode - if needed
+void sweepMode() {
+  Serial.println("SWEEP MODE");
+  // Add sweep mode code here if needed
+}
+
+void readSensors() {
+  // Read front sensor
+  digitalWrite(TRIG_FRONT, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_FRONT, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_FRONT, LOW);
+  durationFront = pulseIn(ECHO_FRONT, HIGH, 30000);
+  distanceFront = durationFront * 0.034 / 2;
+  
+  // Read left sensor
+  digitalWrite(TRIG_LEFT, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_LEFT, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_LEFT, LOW);
+  durationLeft = pulseIn(ECHO_LEFT, HIGH, 30000);
+  distanceLeft = durationLeft * 0.034 / 2;
+  
+  // Read right sensor
+  digitalWrite(TRIG_RIGHT, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_RIGHT, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_RIGHT, LOW);
+  durationRight = pulseIn(ECHO_RIGHT, HIGH, 30000);
+  distanceRight = durationRight * 0.034 / 2;
+  
+  // Constrain values to avoid errors
+  if (distanceFront <= 0 || distanceFront > MAX_DISTANCE) distanceFront = MAX_DISTANCE;
+  if (distanceLeft <= 0 || distanceLeft > MAX_DISTANCE) distanceLeft = MAX_DISTANCE;
+  if (distanceRight <= 0 || distanceRight > MAX_DISTANCE) distanceRight = MAX_DISTANCE;
+}
+
+void followWall() {
+  // Check if there's an obstacle in front
+  if (distanceFront < FRONT_THRESHOLD) {
+    // Obstacle detected in front, turn to avoid it
+    if (distanceLeft > distanceRight) {
+      // More space on the left, turn left
+      turnRight();
+      Serial.println("Obstacle ahead! Turning right.");
+    } else {
+      // More space on the right, turn right
+      turnLeft();
+      Serial.println("Obstacle ahead! Turning left.");
+    }
+    return;
+  }
+  
+  // Determine which wall to follow
+  if (distanceLeft < distanceRight && distanceLeft < 50) {
+    // Follow left wall if it's closer
+    followLeftWall();
+  } else if (distanceRight < 50) {
+    // Follow right wall if it's closer
+    followRightWall();
+  } else {
+    // No wall detected nearby, go straight and look for a wall
+    moveForward(BASE_SPEED, BASE_SPEED);
+    Serial.println("No wall detected, moving forward.");
+  }
+}
+
+void followLeftWall() {
+  // PID control for left wall following
+  int error = distanceLeft - TARGET_DISTANCE;
+  
+  // Calculate integral
+  integral = integral + error;
+  integral = constrain(integral, -100, 100);  // Prevent integral windup
+  
+  // Calculate derivative
+  float derivative = error - lastError;
+  
+  // Calculate PID output
+  float pidOutput = (Kp * error) + (Ki * integral) + (Kd * derivative);
+  
+  // Adjust motor speeds based on PID output
+  int leftSpeed = BASE_SPEED - pidOutput;
+  int rightSpeed = BASE_SPEED + pidOutput;
+  
+  // Constrain motor speeds to valid range
+  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
+  
+  // Move the robot
+  moveForward(leftSpeed, rightSpeed);
+  
+  // Store current error for next iteration
+  lastError = error;
+  
+  Serial.print("Following left wall | PID Output: ");
+  Serial.print(pidOutput);
+  Serial.print(" | Motors L/R: ");
+  Serial.print(leftSpeed);
+  Serial.print("/");
+  Serial.println(rightSpeed);
+}
+
+void followRightWall() {
+  // PID control for right wall following
+  int error = TARGET_DISTANCE - distanceRight;
+  
+  // Calculate integral
+  integral = integral + error;
+  integral = constrain(integral, -100, 100);  // Prevent integral windup
+  
+  // Calculate derivative
+  float derivative = error - lastError;
+  
+  // Calculate PID output
+  float pidOutput = (Kp * error) + (Ki * integral) + (Kd * derivative);
+  
+  // Adjust motor speeds based on PID output
+  int leftSpeed = BASE_SPEED + pidOutput;
+  int rightSpeed = BASE_SPEED - pidOutput;
+  
+  // Constrain motor speeds to valid range
+  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
+  
+  // Move the robot
+  moveForward(leftSpeed, rightSpeed);
+  
+  // Store current error for next iteration
+  lastError = error;
+  
+  Serial.print("Following right wall | PID Output: ");
+  Serial.print(pidOutput);
+  Serial.print(" | Motors L/R: ");
+  Serial.print(leftSpeed);
+  Serial.print("/");
+  Serial.println(rightSpeed);
+}
+
+//========================
+// COMMON MOTOR FUNCTIONS 
+//========================
+
+// Common function for moving forward - compatible with both systems
+void moveForward(int leftSpeed, int rightSpeed) {
+  analogWrite(motorAPin_A, leftSpeed);
+  digitalWrite(motorAPin_B, LOW);
+
+  analogWrite(motorBPin_A, rightSpeed);
+  digitalWrite(motorBPin_B, LOW);
+}
+
+// Line following specific function - maintains backward movement
+void moveMotorForward(int speedA, int speedB) {
+  // Variable speed control for each motor for smoother adjustments
+  analogWrite(motorAPin_A, speedA);
+  digitalWrite(motorAPin_B, LOW);
+
+  analogWrite(motorBPin_A, speedB);
+  digitalWrite(motorBPin_B, LOW);
+}
+
+void moveMotorBackward() {
+  // Stronger backward movement for line search recovery
+  digitalWrite(motorAPin_A, LOW);
+  analogWrite(motorAPin_B, 120); // Increased from 100
+  
+  digitalWrite(motorBPin_A, LOW);
+  analogWrite(motorBPin_B, 120); // Increased from 100
+}
+
+void sharpRight() {
+  // Faster, sharper right turn
+  digitalWrite(motorAPin_A, LOW);
+  analogWrite(motorAPin_B, 70); // Added slight backward motion for sharper pivot
+  
+  analogWrite(motorBPin_A, turnSpeed);
+  digitalWrite(motorBPin_B, LOW);
+
+  delay(sharpTurnDelay);
+}
+
+void sharpLeft() {
+  // Faster, sharper left turn
+  analogWrite(motorAPin_A, turnSpeed);
+  digitalWrite(motorAPin_B, LOW);
+  
+  digitalWrite(motorBPin_A, LOW);
+  analogWrite(motorBPin_B, 70); // Added slight backward motion for sharper pivot
+
+  delay(sharpTurnDelay);
+}
+
+void turnLeft() {
+  analogWrite(motorAPin_A, 0);
+  analogWrite(motorAPin_B, TURN_SPEED);
+  analogWrite(motorBPin_A, BASE_SPEED);
+  analogWrite(motorBPin_B, 0);
+  delay(500);  // Adjust this value to control turning duration
+}
+
+void turnRight() {
+  analogWrite(motorAPin_A, BASE_SPEED);
+  analogWrite(motorAPin_B, 0);
+  analogWrite(motorBPin_A, 0);
+  analogWrite(motorBPin_B, TURN_SPEED);
+  delay(500);  // Adjust this value to control turning duration
+}
+
+void stopMotors() {
+  // Stop both motors
+  digitalWrite(motorAPin_A, LOW);
+  digitalWrite(motorAPin_B, LOW);
+  digitalWrite(motorBPin_A, LOW);
+  digitalWrite(motorBPin_B, LOW);
+}
