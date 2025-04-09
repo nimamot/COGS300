@@ -4,14 +4,13 @@ Welcome to **The Circuit Breakers'** GitHub repository! This is not just a colle
 
 This repository is meant to be a **source of inspiration**. Feel free to experiment, break things, and rebuild them in new ways. After all, true learning happens at the edges of structure and chaos. 🚀
 
-![Circuit Breakers](https://github.com/user-attachments/assets/3b531c5c-a61a-4314-bd40-83b46dea803c)
+<img src="https://github.com/user-attachments/assets/3b531c5c-a61a-4314-bd40-83b46dea803c" alt="Circuit Breakers"  height="600"/>
 
-🔗 **Follow us on Instagram for updates, cool projects, and chaotic creativity!**  
-[**@real_circuit_breakers**](https://www.instagram.com/real_circuit_breakers/)
 
 ---
 
 ## Achievements 🏆
+[Watch our Robot Tournament Highlights](https://drive.google.com/drive/folders/1VqAxnxJjf6DvePWWI3XdKT96mUsYsM89?usp=sharing)
 
 We were proud to make it onto the leaderboard in the Robot Tournament, showcasing our team's skills with impressive results:
 
