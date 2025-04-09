@@ -1,0 +1,283 @@
+/**
+ * Arduino Wall Following Robot with PID Control
+ * Uses 3 ultrasonic sensors (left, front and right) for wall detection and obstacle avoidance
+ */
+
+// Motor control pins
+#define LEFT_FORWARD 8    // Controls left motor forward
+#define LEFT_BACKWARD 9   // Controls left motor backward
+#define RIGHT_FORWARD 7   // Controls right motor forward
+#define RIGHT_BACKWARD 6  // Controls right motor backward
+
+// Ultrasonic sensor pins
+#define TRIG_FRONT 13     // Front ultrasonic trigger
+#define ECHO_FRONT 10     // Front ultrasonic echo
+#define TRIG_LEFT 2       // Left ultrasonic trigger
+#define ECHO_LEFT 3       // Left ultrasonic echo
+#define TRIG_RIGHT 11     // Right ultrasonic trigger
+#define ECHO_RIGHT 5     // Right ultrasonic echo
+
+// IR sensor pins
+#define L_IR A2           // Left IR sensor
+#define M_IR A1           // Middle IR sensor
+#define R_IR A0           // Right IR sensor
+
+// Constants for PID control
+float Kp = 1.1;
+float Ki = 0.0;
+float Kd = 0.25;
+
+// Constants for wall following
+const int TARGET_DISTANCE = 15;   // Target distance from wall in cm
+const int FRONT_THRESHOLD = 15;   // Distance to trigger turning (front sensor)
+const int MAX_DISTANCE = 200;     // Maximum measurable distance
+const int BASE_SPEED = 150;       // Base motor speed (0-255)
+const int MAX_SPEED = 200;        // Maximum motor speed
+
+// Variables for PID calculation
+float lastErrorLeft = 0;
+float lastErrorRight = 0;
+float integralLeft = 0;
+float integralRight = 0;
+
+
+// Variables to store sensor readings
+long durationFront, durationLeft, durationRight;
+int distanceFront, distanceLeft, distanceRight;
+float filteredFront = 0;
+float filteredLeft = 0;
+float filteredRight = 0;
+
+#define FILTER_FACTOR 0.3  // Range: 0.0 to 1.0 (higher = smoother but slower to react)
+
+void setup() {
+  // Initialize serial communication
+  Serial.begin(9600);
+  
+  // Setup motor control pins
+  pinMode(LEFT_FORWARD, OUTPUT);
+  pinMode(LEFT_BACKWARD, OUTPUT);
+  pinMode(RIGHT_FORWARD, OUTPUT);
+  pinMode(RIGHT_BACKWARD, OUTPUT);
+  
+  // Setup ultrasonic sensor pins
+  pinMode(TRIG_FRONT, OUTPUT);
+  pinMode(ECHO_FRONT, INPUT);
+  pinMode(TRIG_LEFT, OUTPUT);
+  pinMode(ECHO_LEFT, INPUT);
+  pinMode(TRIG_RIGHT, OUTPUT);
+  pinMode(ECHO_RIGHT, INPUT);
+  
+  // Setup IR sensor pins
+  pinMode(L_IR, INPUT);
+  pinMode(M_IR, INPUT);
+  pinMode(R_IR, INPUT);
+  
+  // Initial delay to ensure everything is ready
+  delay(2000);
+}
+
+void loop() {
+  // Read distance from all ultrasonic sensors
+  readSensors();
+  
+  // Print sensor readings for debugging
+  printSensorReadings();
+  
+  // Wall following logic with obstacle avoidance
+  followWall();
+  
+  // Small delay for stability
+  delay(50);
+}
+
+void readSensors() {
+  // Read front sensor
+  digitalWrite(TRIG_FRONT, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_FRONT, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_FRONT, LOW);
+  durationFront = pulseIn(ECHO_FRONT, HIGH, 30000);
+  distanceFront = durationFront * 0.034 / 2;
+  
+  // Read left sensor
+  digitalWrite(TRIG_LEFT, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_LEFT, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_LEFT, LOW);
+  durationLeft = pulseIn(ECHO_LEFT, HIGH, 30000);
+  distanceLeft = durationLeft * 0.034 / 2;
+  
+  // Read right sensor
+  digitalWrite(TRIG_RIGHT, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_RIGHT, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_RIGHT, LOW);
+  durationRight = pulseIn(ECHO_RIGHT, HIGH, 30000);
+  distanceRight = durationRight * 0.034 / 2;
+  
+  // Clamp raw distance values first like you already do
+  if (distanceFront <= 0 || distanceFront > MAX_DISTANCE) distanceFront = MAX_DISTANCE;
+  if (distanceLeft <= 0 || distanceLeft > MAX_DISTANCE) distanceLeft = MAX_DISTANCE;
+  if (distanceRight <= 0 || distanceRight > MAX_DISTANCE) distanceRight = MAX_DISTANCE;
+
+  // Apply exponential filter
+  filteredFront = FILTER_FACTOR * filteredFront + (1 - FILTER_FACTOR) * distanceFront;
+  filteredLeft = FILTER_FACTOR * filteredLeft + (1 - FILTER_FACTOR) * distanceLeft;
+  filteredRight = FILTER_FACTOR * filteredRight + (1 - FILTER_FACTOR) * distanceRight;
+}
+
+void printSensorReadings() {
+  // Print sensor readings for debugging
+  Serial.print("Front: ");
+  Serial.print(filteredFront);
+  Serial.print(" cm | Left: ");
+  Serial.print(filteredLeft);
+  Serial.print(" cm | Right: ");
+  Serial.print(filteredRight);
+  Serial.println(" cm");
+}
+
+void followWall() {
+  // Check if there's an obstacle in front
+  if (filteredFront < FRONT_THRESHOLD) {
+    // Obstacle detected in front, turn to avoid it
+    moveBackward(BASE_SPEED);
+    delay(300);
+    if (filteredLeft > filteredRight) {
+      // More space on the left, turn left
+      turnRight();
+      Serial.println("Obstacle ahead! Turning left.");
+    } else {
+      // More space on the right, turn right
+      turnLeft();
+      Serial.println("Obstacle ahead! Turning right.");
+    }
+    return;
+  }
+  
+  // Determine which wall to follow
+  if (filteredLeft < filteredRight && filteredLeft < 50) {
+    // Follow left wall if it's closer
+    followLeftWall();
+  } else if (filteredRight < 50) {
+    // Follow right wall if it's closer
+    followRightWall();
+  } else {
+    // No wall detected nearby, go straight and look for a wall
+    Serial.println("No wall detected, moving forward.");
+  }
+}
+
+void followLeftWall() {
+  // PID control for left wall following
+  int error = TARGET_DISTANCE - filteredLeft;
+  
+  // Calculate integral
+  integralLeft = integralLeft + error;
+  integralLeft = constrain(integralLeft, -100, 100);  // Prevent integral windup
+  
+  // Calculate derivative
+  float derivative = error - lastErrorLeft;
+  
+  // Calculate PID output
+  float pidOutput = (Kp * error) + (Ki * integralLeft) + (Kd * derivative);
+  
+  // Adjust motor speeds based on PID output
+  int leftSpeed = BASE_SPEED - pidOutput;
+  int rightSpeed = BASE_SPEED + pidOutput;
+  
+  // Constrain motor speeds to valid range
+  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
+  
+  // Move the robot
+  moveForward(leftSpeed, rightSpeed);
+  
+  // Store current error for next iteration
+  lastErrorLeft = error;
+  
+  Serial.print("Following left wall | PID Output: ");
+  Serial.print(pidOutput);
+  Serial.print(" | Motors L/R: ");
+  Serial.print(leftSpeed);
+  Serial.print("/");
+  Serial.println(rightSpeed);
+}
+
+void followRightWall() {
+  // PID control for right wall following
+  int error = TARGET_DISTANCE - filteredRight;
+  
+  // Calculate integral
+  integralRight = integralRight + error;
+  integralRight = constrain(integralRight, -100, 100);  // Prevent integral windup
+  
+  // Calculate derivative
+  float derivative = error - lastErrorRight;
+  
+  // Calculate PID output
+  float pidOutput = (Kp * error) + (Ki * integralRight) + (Kd * derivative);
+  
+  // Adjust motor speeds based on PID output
+  int leftSpeed = BASE_SPEED + pidOutput;
+  int rightSpeed = BASE_SPEED - pidOutput;
+  
+  // Constrain motor speeds to valid range
+  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
+  
+  // Move the robot
+  moveForward(leftSpeed, rightSpeed);
+  
+  // Store current error for next iteration
+  lastErrorRight = error;
+  
+  Serial.print("Following right wall | PID Output: ");
+  Serial.print(pidOutput);
+  Serial.print(" | Motors L/R: ");
+  Serial.print(leftSpeed);
+  Serial.print("/");
+  Serial.println(rightSpeed);
+}
+
+// Basic movement functions
+void moveForward(int leftSpeed, int rightSpeed) {
+  analogWrite(LEFT_FORWARD, leftSpeed);
+  analogWrite(LEFT_BACKWARD, 0);
+  analogWrite(RIGHT_FORWARD, rightSpeed);
+  analogWrite(RIGHT_BACKWARD, 0);
+}
+
+void moveBackward(int speed) {
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, speed);
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, speed);
+}
+
+void turnLeft() {
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, BASE_SPEED);
+  analogWrite(RIGHT_FORWARD, BASE_SPEED);
+  analogWrite(RIGHT_BACKWARD, 0);
+  delay(500);  // Adjust this value to control turning duration
+}
+
+void turnRight() {
+  analogWrite(LEFT_FORWARD, BASE_SPEED);
+  analogWrite(LEFT_BACKWARD, 0);
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, BASE_SPEED);
+  delay(500);  // Adjust this value to control turning duration
+}
+
+void stopMotors() {
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, 0);
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, 0);
+}
