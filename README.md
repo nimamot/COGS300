@@ -1,18 +1,28 @@
-# COGS 300: Understanding and Designing Cognitive Systems
+# We Are The Circuit Breakers ⚡
 
-## We Are The Circuit Breakers ⚡
+Welcome to **The Circuit Breakers'** GitHub repository! This is not just a collection of COGS 300 labs, it's a playground for creative problem-solving, experimentation, and exploration. We embrace **bricolage**, an approach where we build, tinker, and remix ideas to deepen our understanding of cognitive systems.
 
-Welcome to **The Circuit Breakers'** GitHub repository! This is not just a collection of COGS 300 labs—it's a playground for creative problem-solving, experimentation, and exploration. We embrace **bricolage**, an approach where we build, tinker, and remix ideas to deepen our understanding of cognitive systems. 
+This repository is meant to be a **source of inspiration**. Feel free to experiment, break things, and rebuild them in new ways. After all, true learning happens at the edges of structure and chaos. 🚀
 
-This repository is meant to be a  **source of inspiration**. Feel free to experiment, break things, and rebuild them in new ways. After all, true learning happens at the edges of structure and chaos. 🚀
-<img src="https://github.com/user-attachments/assets/3b531c5c-a61a-4314-bd40-83b46dea803c"/>
-
+![Circuit Breakers](https://github.com/user-attachments/assets/3b531c5c-a61a-4314-bd40-83b46dea803c)
 
 🔗 **Follow us on Instagram for updates, cool projects, and chaotic creativity!**  
 [**@real_circuit_breakers**](https://www.instagram.com/real_circuit_breakers/)
 
-## Table of Contents
+---
 
+## Achievements 🏆
+
+We were proud to make it onto the leaderboard in the Robot Tournament, showcasing our team's skills with impressive results:
+
+- **Fastest Time**: 2:06
+- **Fastest Line Following in Class**: 15 seconds
+- **Object Detection**: 7 seconds
+- **Wall Maze Navigation**: 40 seconds
+
+---
+
+## Table of Contents
 - [Lab 0: Introduction to Unity](#lab-0-introduction-to-unity)
 - [Lab 1: Obstacle Course](#lab-1-obstacle-course)
 - [Lab 2: Self-Driving Car](#lab-2-self-driving-car)
@@ -20,9 +30,8 @@ This repository is meant to be a  **source of inspiration**. Feel free to experi
 - [Lab 4: Perceptron](#lab-4-perceptron)
 - [Lab 5: Connectionism](#lab-5-connectionism)
 - [Lab 6: Embodied Cognition](#lab-6-embodied-cognition)
-- [Lab 7: Robot Tournament Part 1](#lab-7-robot-tournament-part-1)
-- [Lab 8: Robot Tournament Part 2](#lab-8-robot-tournament-part-2)
-- [Lab 9: Robot Tournament Part 3](#lab-9-robot-tournament-part-3)
+- [Lab 7-9: Robot Tournament]
+
 
 ## Lab 0: Introduction to Unity
 
